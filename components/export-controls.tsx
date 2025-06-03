@@ -4,7 +4,7 @@ import type React from "react"
 
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
-import { Download, FileText, ImageIcon, FileIcon as FilePdf, Upload } from "lucide-react"
+import { Download, FileText, ImageIcon, FileIcon as FilePdf, Upload, Printer } from "lucide-react"
 import { useState, useRef } from "react"
 import type { FormData, FormatacaoConfig } from "@/app/page"
 
@@ -18,23 +18,59 @@ export function ExportControls({ formData, formatacao, onImportData }: ExportCon
   const [isExporting, setIsExporting] = useState<string | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
+  const handlePrint = () => {
+    try {
+      setIsExporting("print")
+
+      // Cria uma nova janela com o relatório formatado para impressão
+      const reportHTML = generateReportHTML(formData, formatacao)
+      const printHTML = getPrintHTMLDocument(reportHTML, formData, formatacao)
+
+      // Cria um blob URL
+      const blob = new Blob([printHTML], { type: "text/html" })
+      const blobUrl = URL.createObjectURL(blob)
+
+      // Abre em nova janela para impressão
+      const printWindow = window.open(blobUrl, "_blank", "width=800,height=1000")
+
+      if (!printWindow) {
+        alert("Por favor, permita pop-ups para esta funcionalidade.")
+        URL.revokeObjectURL(blobUrl)
+        return
+      }
+
+      // Aguarda o carregamento e inicia a impressão
+      printWindow.onload = () => {
+        setTimeout(() => {
+          printWindow.print()
+          URL.revokeObjectURL(blobUrl)
+        }, 1000)
+      }
+    } catch (error) {
+      console.error("Erro ao imprimir:", error)
+      alert("Erro ao imprimir. Tente usar a exportação HTML.")
+    } finally {
+      setIsExporting(null)
+    }
+  }
+
   const handleExportPNG = async () => {
     try {
       setIsExporting("png")
 
-      // Cria uma nova janela com o relatório para captura manual
+      // Cria uma nova janela com o relatório otimizado para captura
       const reportHTML = generateReportHTML(formData, formatacao)
-      const fullHTML = getFullHTMLDocument(reportHTML, formData, formatacao)
+      const pngHTML = getPNGHTMLDocument(reportHTML, formData, formatacao)
 
       // Cria um blob URL
-      const blob = new Blob([fullHTML], { type: "text/html" })
+      const blob = new Blob([pngHTML], { type: "text/html" })
       const blobUrl = URL.createObjectURL(blob)
 
       // Abre em nova janela
-      const newWindow = window.open(blobUrl, "_blank", "width=800,height=1000")
+      const newWindow = window.open(blobUrl, "_blank", "width=900,height=1200")
 
       if (!newWindow) {
-        alert("Por favor, permita pop-ups para esta funcionalidade. Alternativamente, use a exportação HTML.")
+        alert("Por favor, permita pop-ups para esta funcionalidade.")
         URL.revokeObjectURL(blobUrl)
         return
       }
@@ -43,10 +79,17 @@ export function ExportControls({ formData, formatacao, onImportData }: ExportCon
       newWindow.onload = () => {
         setTimeout(() => {
           alert(
-            "Para salvar como PNG:\n\n1. Clique com o botão direito na página\n2. Selecione 'Salvar como...' ou 'Save as...'\n3. Escolha o formato PNG\n\nOu use as ferramentas de captura de tela do seu sistema (Print Screen, Snipping Tool, etc.)",
+            "Para salvar como PNG:\n\n" +
+              "OPÇÃO 1 - Captura de tela:\n" +
+              "• Windows: Win + Shift + S ou Print Screen\n" +
+              "• Mac: Cmd + Shift + 4\n" +
+              "• Linux: Print Screen ou Shift + Print Screen\n\n" +
+              "OPÇÃO 2 - Salvar pelo navegador:\n" +
+              "• Clique com botão direito → 'Salvar como...'\n" +
+              "• Escolha formato PNG se disponível",
           )
           URL.revokeObjectURL(blobUrl)
-        }, 1000)
+        }, 1500)
       }
     } catch (error) {
       console.error("Erro ao exportar PNG:", error)
@@ -60,141 +103,43 @@ export function ExportControls({ formData, formatacao, onImportData }: ExportCon
     try {
       setIsExporting("pdf")
 
-      // Importa as bibliotecas necessárias
-      const jsPDFModule = await import("jspdf")
-      const { jsPDF } = jsPDFModule
+      // Usa a função de impressão do navegador para gerar PDF
+      const reportHTML = generateReportHTML(formData, formatacao)
+      const pdfHTML = getPDFHTMLDocument(reportHTML, formData, formatacao)
 
-      // Cria o PDF diretamente usando texto
-      const pdf = new jsPDF({
-        orientation: "portrait",
-        unit: "mm",
-        format: "a4",
-      })
+      // Cria um blob URL
+      const blob = new Blob([pdfHTML], { type: "text/html" })
+      const blobUrl = URL.createObjectURL(blob)
 
-      // Configurações de página
-      const pageWidth = 210
-      const pageHeight = 297
-      const margin = 20
-      const lineHeight = 6
-      let yPosition = margin
+      // Abre em nova janela para impressão como PDF
+      const pdfWindow = window.open(blobUrl, "_blank", "width=800,height=1000")
 
-      // Função para adicionar texto com quebra de linha
-      const addText = (text: string, fontSize = 12, isBold = false) => {
-        pdf.setFontSize(fontSize)
-        if (isBold) {
-          pdf.setFont("helvetica", "bold")
-        } else {
-          pdf.setFont("helvetica", "normal")
-        }
-
-        const lines = pdf.splitTextToSize(text, pageWidth - 2 * margin)
-
-        // Verifica se precisa de nova página
-        if (yPosition + lines.length * lineHeight > pageHeight - margin) {
-          pdf.addPage()
-          yPosition = margin
-        }
-
-        pdf.text(lines, margin, yPosition)
-        yPosition += lines.length * lineHeight + 5
+      if (!pdfWindow) {
+        alert("Por favor, permita pop-ups para esta funcionalidade.")
+        URL.revokeObjectURL(blobUrl)
+        return
       }
 
-      // Adiciona o cabeçalho
-      pdf.setFillColor(245, 245, 245)
-      pdf.rect(0, 0, pageWidth, 40, "F")
+      // Aguarda o carregamento e instrui sobre impressão em PDF
+      pdfWindow.onload = () => {
+        setTimeout(() => {
+          alert(
+            "Para salvar como PDF:\n\n" +
+              "1. Pressione Ctrl+P (Windows/Linux) ou Cmd+P (Mac)\n" +
+              "2. Na janela de impressão, escolha 'Salvar como PDF'\n" +
+              "3. Configure as margens como 'Mínimas'\n" +
+              "4. Clique em 'Salvar'\n\n" +
+              "A janela será aberta automaticamente para impressão.",
+          )
 
-      // Adiciona logo (texto FCB por enquanto)
-      pdf.setTextColor(45, 46, 96)
-      pdf.setFontSize(20)
-      pdf.setFont("helvetica", "bold")
-      pdf.text("FCB ADVOGADOS", pageWidth - margin, 25, { align: "right" })
+          // Abre automaticamente o diálogo de impressão
+          setTimeout(() => {
+            pdfWindow.print()
+          }, 2000)
 
-      pdf.setTextColor(45, 46, 96) // Cor azul FCB
-      addText(formData.nomeProjeto || "[Nome do Projeto/Produto]", 18, true)
-
-      yPosition = 50
-
-      // Adiciona o conteúdo
-      pdf.setTextColor(0, 0, 0)
-
-      addText("1. INFORMAÇÕES GERAIS DO PRODUTO", 14, true)
-      addText("Nome do Projeto/Produto:", 12, true)
-      addText(formData.nomeProjeto || "[Nome do Projeto/Produto]", 12)
-
-      addText("Descrição do Projeto/Produto:", 12, true)
-      addText(formData.descricaoProjeto || "[Descrição do Projeto/Produto]", 12)
-
-      addText("Objetivo do Projeto/Produto:", 12, true)
-      const objetivos = formData.objetivoProjeto.split("\n").filter((item) => item.trim())
-      objetivos.forEach((obj) => addText(`• ${obj.trim()}`, 12))
-
-      addText("2. PÚBLICO-ALVO", 14, true)
-      addText("Perfil do Cliente:", 12, true)
-      const perfis = formData.perfilCliente.split("\n").filter((item) => item.trim())
-      perfis.forEach((perfil) => addText(`• ${perfil.trim()}`, 12))
-
-      addText("Necessidades Específicas do Cliente:", 12, true)
-      const necessidades = formData.necessidadesCliente.split("\n").filter((item) => item.trim())
-      necessidades.forEach((nec) => addText(`• ${nec.trim()}`, 12))
-
-      addText("Setores de Atuação:", 12, true)
-      const setores = formData.setoresAtuacao.split("\n").filter((item) => item.trim())
-      setores.forEach((setor) => addText(`• ${setor.trim()}`, 12))
-
-      addText("3. DETALHES DO PROJETO", 14, true)
-      addText("Metodologia:", 12, true)
-      const metodologias = formData.metodologia.split("\n").filter((item) => item.trim())
-      metodologias.forEach((met) => addText(`• ${met.trim()}`, 12))
-
-      addText("Entregáveis:", 12, true)
-      const entregaveis = formData.entregaveis.split("\n").filter((item) => item.trim())
-      entregaveis.forEach((ent) => addText(`• ${ent.trim()}`, 12))
-
-      addText("Indicadores de Sucesso:", 12, true)
-      const indicadores = formData.indicadoresSucesso.split("\n").filter((item) => item.trim())
-      indicadores.forEach((ind) => addText(`• ${ind.trim()}`, 12))
-
-      addText("4. BENEFÍCIOS PARA O CLIENTE", 14, true)
-      addText("Benefícios Tangíveis:", 12, true)
-      const beneficiosTang = formData.beneficiosTangiveis.split("\n").filter((item) => item.trim())
-      beneficiosTang.forEach((ben) => addText(`• ${ben.trim()}`, 12))
-
-      addText("Benefícios Intangíveis:", 12, true)
-      const beneficiosIntang = formData.beneficiosIntangiveis.split("\n").filter((item) => item.trim())
-      beneficiosIntang.forEach((ben) => addText(`• ${ben.trim()}`, 12))
-
-      addText("5. DIFERENCIAIS COMPETITIVOS", 14, true)
-      addText("Pontos Fortes:", 12, true)
-      const pontos = formData.pontosFortes.split("\n").filter((item) => item.trim())
-      pontos.forEach((ponto) => addText(`• ${ponto.trim()}`, 12))
-
-      addText("Casos de Sucesso:", 12, true)
-      const casos = formData.casosSucesso.split("\n").filter((item) => item.trim())
-      casos.forEach((caso) => addText(caso.trim(), 12))
-
-      addText("6. ASPECTOS FINANCEIROS", 14, true)
-      addText("Modelo de Precificação:", 12, true)
-      const modelos = formData.modeloPrecificacao.split("\n").filter((item) => item.trim())
-      modelos.forEach((modelo) => addText(modelo.trim(), 12))
-
-      // Adiciona rodapé
-      const totalPages = pdf.getNumberOfPages()
-      for (let i = 1; i <= totalPages; i++) {
-        pdf.setPage(i)
-        pdf.setFillColor(45, 46, 96)
-        pdf.rect(0, pageHeight - 20, pageWidth, 20, "F")
-        pdf.setTextColor(255, 255, 255)
-        pdf.setFontSize(10)
-        pdf.text(
-          `© ${new Date().getFullYear()} FCB Advogados. Todos os direitos reservados.`,
-          pageWidth / 2,
-          pageHeight - 10,
-          { align: "center" },
-        )
+          URL.revokeObjectURL(blobUrl)
+        }, 1000)
       }
-
-      // Salva o PDF
-      pdf.save(`relatorio-comercial-${formData.nomeProjeto.replace(/\s+/g, "-").toLowerCase()}.pdf`)
     } catch (error) {
       console.error("Erro ao exportar PDF:", error)
       alert("Erro ao exportar como PDF. Tente novamente ou use a exportação HTML.")
@@ -262,6 +207,266 @@ export function ExportControls({ formData, formatacao, onImportData }: ExportCon
     event.target.value = ""
   }
 
+  const handleExportJSON = () => {
+    try {
+      setIsExporting("json")
+
+      const data = {
+        formData,
+        formatacao,
+        exportDate: new Date().toISOString(),
+        version: "1.0",
+      }
+
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" })
+      const link = document.createElement("a")
+      link.download = `relatorio-dados-${formData.nomeProjeto.replace(/\s+/g, "-").toLowerCase()}.json`
+      link.href = URL.createObjectURL(blob)
+      link.click()
+
+      // Libera o URL
+      setTimeout(() => {
+        URL.revokeObjectURL(link.href)
+      }, 100)
+    } catch (error) {
+      console.error("Erro ao exportar JSON:", error)
+      alert("Erro ao exportar dados JSON. Verifique o console para mais detalhes.")
+    } finally {
+      setIsExporting(null)
+    }
+  }
+
+  // Função para gerar documento HTML otimizado para impressão
+  const getPrintHTMLDocument = (reportHTML: string, formData: FormData, formatacao: FormatacaoConfig) => {
+    return `<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>${formData.nomeProjeto} - FCB Advogados</title>
+    <link href="https://fonts.googleapis.com/css2?family=${formatacao.fontFamily.replace(/\s+/g, "+")}:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        @page {
+            size: A4;
+            margin: 15mm;
+        }
+        
+        @media print {
+            body {
+                -webkit-print-color-adjust: exact !important;
+                print-color-adjust: exact !important;
+                margin: 0;
+                padding: 0;
+            }
+            
+            .container {
+                box-shadow: none !important;
+                border-radius: 0 !important;
+                margin: 0 !important;
+                padding: 0 !important;
+            }
+            
+            .no-print {
+                display: none !important;
+            }
+        }
+        
+        body { 
+            font-family: ${formatacao.fontFamily}, sans-serif; 
+            margin: 0; 
+            padding: 0;
+            background-color: white;
+            font-size: ${formatacao.fontSize}px;
+            line-height: ${formatacao.lineHeight};
+            color: ${formatacao.textColor};
+        }
+        
+        .container { 
+            width: 100%;
+            max-width: 210mm;
+            margin: 0 auto; 
+            background: ${formatacao.backgroundColor}; 
+            min-height: 100vh;
+        }
+        
+        .print-button {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            z-index: 1000;
+            padding: 10px 20px;
+            background: #007bff;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+        
+        .print-button:hover {
+            background: #0056b3;
+        }
+    </style>
+    <script>
+        window.onload = function() {
+            setTimeout(function() {
+                window.print();
+            }, 1000);
+        }
+    </script>
+</head>
+<body>
+    <button class="print-button no-print" onclick="window.print()">🖨️ Imprimir</button>
+    <div class="container">
+        ${reportHTML}
+    </div>
+</body>
+</html>`
+  }
+
+  // Função para gerar documento HTML otimizado para PNG
+  const getPNGHTMLDocument = (reportHTML: string, formData: FormData, formatacao: FormatacaoConfig) => {
+    return `<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>${formData.nomeProjeto} - FCB Advogados</title>
+    <link href="https://fonts.googleapis.com/css2?family=${formatacao.fontFamily.replace(/\s+/g, "+")}:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body { 
+            font-family: ${formatacao.fontFamily}, sans-serif; 
+            margin: 0; 
+            padding: 20px;
+            background-color: #f0f0f0;
+            font-size: ${formatacao.fontSize}px;
+            line-height: ${formatacao.lineHeight};
+            color: ${formatacao.textColor};
+        }
+        
+        .container { 
+            width: 800px;
+            margin: 0 auto; 
+            background: ${formatacao.backgroundColor}; 
+            border-radius: ${formatacao.borderRadius}px;
+            overflow: hidden;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+        }
+        
+        .capture-info {
+            position: fixed;
+            top: 10px;
+            left: 10px;
+            background: #007bff;
+            color: white;
+            padding: 10px;
+            border-radius: 5px;
+            font-size: 12px;
+            z-index: 1000;
+            max-width: 300px;
+        }
+    </style>
+</head>
+<body>
+    <div class="capture-info">
+        📸 Use as ferramentas de captura de tela do seu sistema para salvar como PNG
+    </div>
+    <div class="container">
+        ${reportHTML}
+    </div>
+</body>
+</html>`
+  }
+
+  // Função para gerar documento HTML otimizado para PDF
+  const getPDFHTMLDocument = (reportHTML: string, formData: FormData, formatacao: FormatacaoConfig) => {
+    return `<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>${formData.nomeProjeto} - FCB Advogados</title>
+    <link href="https://fonts.googleapis.com/css2?family=${formatacao.fontFamily.replace(/\s+/g, "+")}:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        @page {
+            size: A4;
+            margin: 10mm;
+        }
+        
+        @media print {
+            body {
+                -webkit-print-color-adjust: exact !important;
+                print-color-adjust: exact !important;
+                margin: 0;
+                padding: 0;
+            }
+            
+            .container {
+                box-shadow: none !important;
+                border-radius: 0 !important;
+                margin: 0 !important;
+                padding: 0 !important;
+                page-break-inside: avoid;
+            }
+            
+            .no-print {
+                display: none !important;
+            }
+            
+            section {
+                page-break-inside: avoid;
+                break-inside: avoid;
+            }
+        }
+        
+        body { 
+            font-family: ${formatacao.fontFamily}, sans-serif; 
+            margin: 0; 
+            padding: 0;
+            background-color: white;
+            font-size: ${Math.max(formatacao.fontSize - 2, 12)}px;
+            line-height: ${formatacao.lineHeight};
+            color: ${formatacao.textColor};
+        }
+        
+        .container { 
+            width: 100%;
+            max-width: 190mm;
+            margin: 0 auto; 
+            background: white; 
+            min-height: 100vh;
+        }
+        
+        .pdf-info {
+            position: fixed;
+            top: 20px;
+            left: 20px;
+            background: #28a745;
+            color: white;
+            padding: 15px;
+            border-radius: 5px;
+            font-size: 14px;
+            z-index: 1000;
+            max-width: 400px;
+            line-height: 1.4;
+        }
+    </style>
+</head>
+<body>
+    <div class="pdf-info no-print">
+        📄 <strong>Para salvar como PDF:</strong><br>
+        1. Pressione Ctrl+P (ou Cmd+P no Mac)<br>
+        2. Escolha "Salvar como PDF"<br>
+        3. Configure margens como "Mínimas"<br>
+        4. Clique em "Salvar"
+    </div>
+    <div class="container">
+        ${reportHTML}
+    </div>
+</body>
+</html>`
+  }
+
   // Função para gerar o documento HTML completo
   const getFullHTMLDocument = (reportHTML: string, formData: FormData, formatacao: FormatacaoConfig) => {
     return `<!DOCTYPE html>
@@ -280,14 +485,7 @@ export function ExportControls({ formData, formatacao, onImportData }: ExportCon
             
             @page {
                 size: A4;
-                margin: 0;
-            }
-            
-            html, body {
-                width: 210mm;
-                height: 297mm;
-                margin: 0;
-                padding: 0;
+                margin: 15mm;
             }
             
             .container {
@@ -323,35 +521,6 @@ export function ExportControls({ formData, formatacao, onImportData }: ExportCon
     </div>
 </body>
 </html>`
-  }
-
-  const handleExportJSON = () => {
-    try {
-      setIsExporting("json")
-
-      const data = {
-        formData,
-        formatacao,
-        exportDate: new Date().toISOString(),
-        version: "1.0",
-      }
-
-      const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" })
-      const link = document.createElement("a")
-      link.download = `relatorio-dados-${formData.nomeProjeto.replace(/\s+/g, "-").toLowerCase()}.json`
-      link.href = URL.createObjectURL(blob)
-      link.click()
-
-      // Libera o URL
-      setTimeout(() => {
-        URL.revokeObjectURL(link.href)
-      }, 100)
-    } catch (error) {
-      console.error("Erro ao exportar JSON:", error)
-      alert("Erro ao exportar dados JSON. Verifique o console para mais detalhes.")
-    } finally {
-      setIsExporting(null)
-    }
   }
 
   // Add this helper function to generate the report HTML
@@ -395,17 +564,17 @@ export function ExportControls({ formData, formatacao, onImportData }: ExportCon
             </h1>
           </div>
           <div style="
-  position: absolute;
-  top: 16px;
-  right: 16px;
-">
-  <img 
-    src="/images/fcb-logo.png" 
-    alt="FCB Advogados" 
-    style="width: ${Math.round(formatacao.logoSize * 2.5)}px; height: ${Math.round(formatacao.logoSize * 0.6)}px; object-fit: contain;"
-    onerror="this.style.display='none'"
-  />
-</div>
+            position: absolute;
+            top: 16px;
+            right: 16px;
+          ">
+            <img 
+              src="https://hebbkx1anhila5yf.public.blob.vercel-storage.com/FCB_fundo%20transparente_assinatura_imagem_AL-DVzHiQaovpgYD4mSDbNfetuSDMyE2e.png" 
+              alt="FCB Advogados" 
+              style="width: ${Math.round(formatacao.logoSize * 2.5)}px; height: ${Math.round(formatacao.logoSize * 0.6)}px; object-fit: contain;"
+              onerror="this.style.display='none'"
+            />
+          </div>
         </div>
       </header>
 
@@ -593,19 +762,19 @@ export function ExportControls({ formData, formatacao, onImportData }: ExportCon
     <div className="space-y-6">
       <input type="file" ref={fileInputRef} onChange={handleFileChange} accept=".json" style={{ display: "none" }} />
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         <Card>
           <CardContent className="p-6">
             <div className="flex items-center gap-3 mb-4">
-              <ImageIcon className="h-6 w-6 text-green-600" />
+              <Printer className="h-6 w-6 text-blue-600" />
               <div>
-                <h3 className="font-semibold">Exportar PNG</h3>
-                <p className="text-sm text-gray-600">Abrir em nova janela para captura</p>
+                <h3 className="font-semibold">Imprimir</h3>
+                <p className="text-sm text-gray-600">Imprimir diretamente</p>
               </div>
             </div>
-            <Button onClick={handleExportPNG} className="w-full" variant="outline" disabled={isExporting !== null}>
-              <ImageIcon className="h-4 w-4 mr-2" />
-              {isExporting === "png" ? "Abrindo..." : "Exportar como PNG"}
+            <Button onClick={handlePrint} className="w-full" disabled={isExporting !== null}>
+              <Printer className="h-4 w-4 mr-2" />
+              {isExporting === "print" ? "Preparando..." : "Imprimir"}
             </Button>
           </CardContent>
         </Card>
@@ -616,12 +785,28 @@ export function ExportControls({ formData, formatacao, onImportData }: ExportCon
               <FilePdf className="h-6 w-6 text-red-600" />
               <div>
                 <h3 className="font-semibold">Exportar PDF</h3>
-                <p className="text-sm text-gray-600">Salvar como documento PDF</p>
+                <p className="text-sm text-gray-600">Salvar como PDF</p>
               </div>
             </div>
             <Button onClick={handleExportPDF} className="w-full" disabled={isExporting !== null}>
               <FilePdf className="h-4 w-4 mr-2" />
-              {isExporting === "pdf" ? "Exportando..." : "Exportar como PDF"}
+              {isExporting === "pdf" ? "Preparando..." : "Exportar PDF"}
+            </Button>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardContent className="p-6">
+            <div className="flex items-center gap-3 mb-4">
+              <ImageIcon className="h-6 w-6 text-green-600" />
+              <div>
+                <h3 className="font-semibold">Exportar PNG</h3>
+                <p className="text-sm text-gray-600">Captura de tela</p>
+              </div>
+            </div>
+            <Button onClick={handleExportPNG} className="w-full" variant="outline" disabled={isExporting !== null}>
+              <ImageIcon className="h-4 w-4 mr-2" />
+              {isExporting === "png" ? "Preparando..." : "Exportar PNG"}
             </Button>
           </CardContent>
         </Card>
@@ -632,12 +817,12 @@ export function ExportControls({ formData, formatacao, onImportData }: ExportCon
               <FileText className="h-6 w-6 text-orange-600" />
               <div>
                 <h3 className="font-semibold">Exportar HTML</h3>
-                <p className="text-sm text-gray-600">Salvar como arquivo HTML</p>
+                <p className="text-sm text-gray-600">Arquivo independente</p>
               </div>
             </div>
             <Button onClick={handleExportHTML} className="w-full" variant="outline" disabled={isExporting !== null}>
               <FileText className="h-4 w-4 mr-2" />
-              {isExporting === "html" ? "Exportando..." : "Exportar como HTML"}
+              {isExporting === "html" ? "Exportando..." : "Exportar HTML"}
             </Button>
           </CardContent>
         </Card>
@@ -647,8 +832,8 @@ export function ExportControls({ formData, formatacao, onImportData }: ExportCon
             <div className="flex items-center gap-3 mb-4">
               <Upload className="h-6 w-6 text-blue-600" />
               <div>
-                <h3 className="font-semibold">Importar Dados</h3>
-                <p className="text-sm text-gray-600">Carregar projeto salvo</p>
+                <h3 className="font-semibold">Importar</h3>
+                <p className="text-sm text-gray-600">Carregar projeto</p>
               </div>
             </div>
             <Button onClick={handleImportJSON} className="w-full" variant="outline" disabled={isExporting !== null}>
@@ -658,18 +843,18 @@ export function ExportControls({ formData, formatacao, onImportData }: ExportCon
           </CardContent>
         </Card>
 
-        <Card className="md:col-span-2">
+        <Card>
           <CardContent className="p-6">
             <div className="flex items-center gap-3 mb-4">
               <Download className="h-6 w-6 text-purple-600" />
               <div>
-                <h3 className="font-semibold">Exportar Dados</h3>
-                <p className="text-sm text-gray-600">Salvar dados em JSON para uso posterior</p>
+                <h3 className="font-semibold">Backup</h3>
+                <p className="text-sm text-gray-600">Salvar dados</p>
               </div>
             </div>
             <Button onClick={handleExportJSON} className="w-full" variant="outline" disabled={isExporting !== null}>
               <Download className="h-4 w-4 mr-2" />
-              {isExporting === "json" ? "Exportando..." : "Exportar Dados"}
+              {isExporting === "json" ? "Salvando..." : "Exportar Dados"}
             </Button>
           </CardContent>
         </Card>
@@ -677,27 +862,27 @@ export function ExportControls({ formData, formatacao, onImportData }: ExportCon
 
       <Card>
         <CardContent className="p-6">
-          <h3 className="font-semibold mb-4">Instruções de Uso</h3>
-          <div className="space-y-2 text-sm text-gray-600">
-            <p>
-              <strong>PNG:</strong> Abre o relatório em uma nova janela. Use as ferramentas de captura de tela do seu
-              sistema ou clique com o botão direito e selecione "Salvar como...".
-            </p>
-            <p>
-              <strong>PDF:</strong> Cria automaticamente um documento PDF profissional com múltiplas páginas se
-              necessário.
-            </p>
-            <p>
-              <strong>HTML:</strong> Cria um arquivo HTML independente que pode ser aberto em qualquer navegador.
-            </p>
-            <p>
-              <strong>Importar Dados:</strong> Permite carregar um arquivo JSON previamente exportado para restaurar um
-              projeto.
-            </p>
-            <p>
-              <strong>Exportar Dados:</strong> Salva todos os dados e configurações para importar posteriormente ou
-              fazer backup.
-            </p>
+          <h3 className="font-semibold mb-4">📋 Instruções de Uso</h3>
+          <div className="space-y-3 text-sm text-gray-600">
+            <div className="p-3 bg-blue-50 rounded-lg">
+              <p className="font-medium text-blue-800 mb-1">🖨️ Imprimir</p>
+              <p>Abre uma janela otimizada para impressão direta. Ideal para impressoras físicas.</p>
+            </div>
+
+            <div className="p-3 bg-red-50 rounded-lg">
+              <p className="font-medium text-red-800 mb-1">📄 PDF</p>
+              <p>Abre janela com instruções para salvar como PDF usando Ctrl+P → "Salvar como PDF".</p>
+            </div>
+
+            <div className="p-3 bg-green-50 rounded-lg">
+              <p className="font-medium text-green-800 mb-1">📸 PNG</p>
+              <p>Abre janela otimizada para captura de tela. Use Win+Shift+S (Windows) ou Cmd+Shift+4 (Mac).</p>
+            </div>
+
+            <div className="p-3 bg-orange-50 rounded-lg">
+              <p className="font-medium text-orange-800 mb-1">🌐 HTML</p>
+              <p>Baixa arquivo HTML independente que funciona em qualquer navegador.</p>
+            </div>
           </div>
         </CardContent>
       </Card>
